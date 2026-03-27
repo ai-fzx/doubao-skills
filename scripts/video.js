@@ -9,8 +9,10 @@
  */
 
 const { chromium } = require('playwright');
+const { resolveOutputDir, downloadVideoAssets } = require('./utils_output');
 
 const CDP_URL = process.env.DOUBAO_CDP_URL || 'http://127.0.0.1:9222';
+const VERBOSE = process.env.DOUBAO_VERBOSE === '1' || process.env.DOUBAO_VERBOSE === 'true';
 const DOUBAO_VIDEO_URL = 'https://www.doubao.com/chat/create-video';
 
 /**
@@ -107,24 +109,128 @@ async function clickSubmit(page) {
 }
 
 /**
- * 等待视频生成完成
- * 豆包视频生成时：提交后显示进度消息/loading；完成后出现 video 元素或下载按钮
+ * 等待视频生成完成（waitForFunction + 较大 polling，避免 while 密集轮询与频繁日志）
  */
-async function waitForVideoDone(page, timeout = 360000) {
+async function waitForVideoDone(page, timeout = 360000, opts = {}) {
+  const polling = opts.polling != null ? opts.polling : 5000;
   const start = Date.now();
-  let stableCount = 0;
-  let lastSrc = null;
-  let checkCount = 0;
+  let iv = null;
+  if (VERBOSE) {
+    iv = setInterval(() => {
+      const elapsed = Math.round((Date.now() - start) / 1000);
+      process.stderr.write(`[doubao] 等待视频生成中… ${elapsed}s\n`);
+    }, 60000);
+  }
 
-  while (Date.now() - start < timeout) {
-    await page.waitForTimeout(3000);
-    checkCount++;
+  try {
+    await page.evaluate(() => {
+      window.__doubaoVidWait = { last: null, stable: 0, mode: null };
+    });
+
+    await page.waitForFunction(
+      () => {
+        const bodyText = document.body.innerText || '';
+        const isGeneratingText = /生成中|generating|正在生成|(\d+%)/i.test(bodyText.slice(-1000));
+
+        const loadingEls = document.querySelectorAll(
+          '[class*="loading"], [class*="generating"], [class*="progress"], [class*="pending"], [class*="skeleton"]'
+        );
+        let isGeneratingEl = false;
+        for (const el of loadingEls) {
+          if (el.offsetParent !== null && el.offsetWidth > 20) {
+            isGeneratingEl = true;
+            break;
+          }
+        }
+
+        const isGenerating = isGeneratingText || isGeneratingEl;
+
+        let videoSrc = null;
+        const videoEls = document.querySelectorAll('video');
+        for (const v of videoEls) {
+          const src = v.src || v.currentSrc || v.getAttribute('data-src') || '';
+          if (src && src.startsWith('http')) {
+            videoSrc = src;
+            break;
+          }
+          const source = v.querySelector('source');
+          if (source && source.src && source.src.startsWith('http')) {
+            videoSrc = source.src;
+            break;
+          }
+        }
+
+        let downloadSrc = null;
+        const downloadEls = document.querySelectorAll('a[download], a[href*=".mp4"], [class*="download"] a');
+        for (const el of downloadEls) {
+          const href = el.href || el.getAttribute('data-url') || '';
+          if (href && href.startsWith('http')) {
+            downloadSrc = href;
+            break;
+          }
+        }
+
+        let thumbSrc = null;
+        const thumbSelectors = [
+          '[class*="video"] img[src*="http"]',
+          '[class*="cover"] img[src*="http"]',
+          '[class*="thumb"] img[src*="http"]',
+          '[class*="result"] img[src*="http"]',
+        ];
+        for (const sel of thumbSelectors) {
+          const el = document.querySelector(sel);
+          if (el && el.src && el.src.startsWith('http') && !el.src.includes('avatar')) {
+            thumbSrc = el.src;
+            break;
+          }
+        }
+
+        const w = window.__doubaoVidWait;
+        const foundSrc = videoSrc || downloadSrc;
+        const key = foundSrc || thumbSrc || '';
+        // 提交后豆包常把当前会话切到 /thread/<id>；在会话页且不再「生成中」时，结果区更可信，可少等一轮 stable
+        const onThread =
+          (window.location.pathname || '').includes('/thread/') ||
+          (window.location.href || '').indexOf('/thread/') !== -1;
+
+        if (isGenerating) {
+          w.last = null;
+          w.stable = 0;
+          w.mode = null;
+          return false;
+        }
+
+        if (foundSrc) {
+          w.mode = 'video';
+          if (key === w.last) w.stable++;
+          else {
+            w.last = key;
+            w.stable = 1;
+          }
+          const need = onThread ? 1 : 2;
+          return w.stable >= need;
+        }
+
+        if (thumbSrc) {
+          w.mode = 'thumb_only';
+          const keyT = thumbSrc;
+          if (keyT === w.last) w.stable++;
+          else {
+            w.last = keyT;
+            w.stable = 1;
+          }
+          const need = onThread ? 2 : 3;
+          return w.stable >= need;
+        }
+
+        return false;
+      },
+      { timeout, polling }
+    );
 
     const state = await page.evaluate(() => {
-      // 1. 检测是否还在生成中
       const bodyText = document.body.innerText || '';
       const isGeneratingText = /生成中|generating|正在生成|(\d+%)/i.test(bodyText.slice(-1000));
-
       const loadingEls = document.querySelectorAll(
         '[class*="loading"], [class*="generating"], [class*="progress"], [class*="pending"], [class*="skeleton"]'
       );
@@ -135,19 +241,15 @@ async function waitForVideoDone(page, timeout = 360000) {
           break;
         }
       }
-
       const isGenerating = isGeneratingText || isGeneratingEl;
 
-      // 2. 检测 video 元素
       let videoSrc = null;
-      const videoEls = document.querySelectorAll('video');
-      for (const v of videoEls) {
+      for (const v of document.querySelectorAll('video')) {
         const src = v.src || v.currentSrc || v.getAttribute('data-src') || '';
         if (src && src.startsWith('http')) {
           videoSrc = src;
           break;
         }
-        // 检查 source 子元素
         const source = v.querySelector('source');
         if (source && source.src && source.src.startsWith('http')) {
           videoSrc = source.src;
@@ -155,10 +257,8 @@ async function waitForVideoDone(page, timeout = 360000) {
         }
       }
 
-      // 3. 检测下载按钮（视频生成完会出现）
       let downloadSrc = null;
-      const downloadEls = document.querySelectorAll('a[download], a[href*=".mp4"], [class*="download"] a');
-      for (const el of downloadEls) {
+      for (const el of document.querySelectorAll('a[download], a[href*=".mp4"], [class*="download"] a')) {
         const href = el.href || el.getAttribute('data-url') || '';
         if (href && href.startsWith('http')) {
           downloadSrc = href;
@@ -166,7 +266,6 @@ async function waitForVideoDone(page, timeout = 360000) {
         }
       }
 
-      // 4. 检测 blob 或 tos 图片链接（视频封面）
       let thumbSrc = null;
       const thumbSelectors = [
         '[class*="video"] img[src*="http"]',
@@ -182,55 +281,45 @@ async function waitForVideoDone(page, timeout = 360000) {
         }
       }
 
-      return { isGenerating, videoSrc, downloadSrc, thumbSrc };
+      const mode = window.__doubaoVidWait && window.__doubaoVidWait.mode;
+      return { isGenerating, videoSrc, downloadSrc, thumbSrc, mode };
     });
 
-    // 每 10 次（30秒）输出一次心跳日志
-    if (checkCount % 10 === 0) {
-      const elapsed = Math.round((Date.now() - start) / 1000);
-      process.stderr.write(`等待中... 已过 ${elapsed}s，isGenerating=${state.isGenerating}\n`);
+    const mode = state.mode;
+    const onThreadPage = await page.evaluate(() => {
+      const p = window.location.pathname || '';
+      return p.includes('/thread/') || (window.location.href || '').includes('/thread/');
+    });
+    if (mode === 'thumb_only') {
+      return {
+        done: true,
+        reason: 'thumb_only',
+        videoSrc: null,
+        downloadSrc: null,
+        thumbSrc: state.thumbSrc,
+        onThreadPage,
+      };
     }
-
-    const foundSrc = state.videoSrc || state.downloadSrc;
-    if (!state.isGenerating && foundSrc) {
-      if (foundSrc === lastSrc) {
-        stableCount++;
-        if (stableCount >= 2) {
-          return {
-            done: true,
-            reason: 'stable',
-            videoSrc: state.videoSrc,
-            downloadSrc: state.downloadSrc,
-            thumbSrc: state.thumbSrc,
-          };
-        }
-      } else {
-        stableCount = 1;
-        lastSrc = foundSrc;
-      }
-    } else if (!state.isGenerating && state.thumbSrc) {
-      // 只有封面图，可能视频 src 在 blob 里，稳定 3 次后返回
-      if (state.thumbSrc === lastSrc) {
-        stableCount++;
-        if (stableCount >= 3) {
-          return {
-            done: true,
-            reason: 'thumb_only',
-            videoSrc: null,
-            downloadSrc: null,
-            thumbSrc: state.thumbSrc,
-          };
-        }
-      } else {
-        stableCount = 1;
-        lastSrc = state.thumbSrc;
-      }
-    } else {
-      stableCount = 0;
-    }
+    return {
+      done: true,
+      reason: 'stable',
+      videoSrc: state.videoSrc,
+      downloadSrc: state.downloadSrc,
+      thumbSrc: state.thumbSrc,
+      onThreadPage,
+    };
+  } catch (_) {
+    return {
+      done: false,
+      reason: 'timeout',
+      videoSrc: null,
+      downloadSrc: null,
+      thumbSrc: null,
+      onThreadPage: false,
+    };
+  } finally {
+    if (iv) clearInterval(iv);
   }
-
-  return { done: false, reason: 'timeout', videoSrc: null, downloadSrc: null, thumbSrc: null };
 }
 
 /**
@@ -297,6 +386,8 @@ async function generateVideo(prompt, options = {}) {
     duration = 5,
     timeout = 360000,
     retries = 1,
+    outputDir: outputDirOpt = null,
+    saveToDisk = true,
   } = options;
 
   let lastError = null;
@@ -308,7 +399,7 @@ async function generateVideo(prompt, options = {}) {
       const ctx = browser.contexts()[0];
       const page = ctx.pages()[0];
 
-      // 1. 导航到豆包视频生成页面
+      // 1. 导航到豆包视频生成页
       const currentUrl = page.url();
       if (!currentUrl.includes('create-video')) {
         await page.goto(DOUBAO_VIDEO_URL, { waitUntil: 'domcontentloaded', timeout: 25000 });
@@ -326,7 +417,7 @@ async function generateVideo(prompt, options = {}) {
         };
       }
 
-      // 3. 填写 prompt
+      // 3–4. 填写 prompt 并提交
       const inputOk = await fillInput(page, prompt);
       if (!inputOk) {
         await browser.close();
@@ -336,13 +427,10 @@ async function generateVideo(prompt, options = {}) {
           message: '未找到输入框，请确认已导航到豆包视频生成页面',
         };
       }
-
-      // 4. 提交生成
       await clickSubmit(page);
+      process.stderr.write(`视频生成中，最多等待 ${Math.round(timeout / 1000)} 秒（完成后自动保存到本地）…\n`);
 
-      // 5. 等待视频生成完成
-      process.stderr.write(`视频生成中，等待最多 ${Math.round(timeout / 1000)} 秒...\n`);
-      const waitResult = await waitForVideoDone(page, timeout);
+      const waitResult = await waitForVideoDone(page, timeout, { polling: 5000 });
 
       // 6. 提取视频结果
       const videoResult = await extractVideoResult(page);
@@ -352,19 +440,39 @@ async function generateVideo(prompt, options = {}) {
       if (!videoResult.downloadUrl && waitResult.downloadSrc) videoResult.downloadUrl = waitResult.downloadSrc;
       if (!videoResult.thumbnailUrl && waitResult.thumbSrc) videoResult.thumbnailUrl = waitResult.thumbSrc;
 
+      const outDir = resolveOutputDir(outputDirOpt);
+      let localPaths = {};
+      if (saveToDisk && (videoResult.videoUrl || videoResult.downloadUrl || videoResult.thumbnailUrl)) {
+        try {
+          localPaths = await downloadVideoAssets(page, {
+            videoUrl: videoResult.videoUrl,
+            thumbnailUrl: videoResult.thumbnailUrl,
+            downloadUrl: videoResult.downloadUrl,
+            outputDir: outDir,
+            prompt,
+          });
+        } catch (e) {
+          process.stderr.write(`下载到本地失败: ${e.message}\n`);
+        }
+      }
+
       await browser.close();
 
       return {
         success: true,
         prompt,
-        options: { ratio, duration },
+        options: { ratio, duration, outputDir: outDir, saveToDisk },
         videoUrl: videoResult.videoUrl,
         thumbnailUrl: videoResult.thumbnailUrl,
         downloadUrl: videoResult.downloadUrl,
+        localPaths,
         timestamp: new Date().toISOString(),
         meta: {
           generationDone: waitResult.done,
           doneReason: waitResult.reason,
+          /** 提交后若地址栏进入 /thread/<id>，说明已落在会话页，与 DOM 一起用于判定「已出结果」 */
+          threadPageReached: !!waitResult.onThreadPage,
+          pageUrl: page.url(),
           attempt: attempt + 1,
         },
       };
@@ -400,17 +508,28 @@ if (require.main === module) {
   const prompt = args.find(a => !a.startsWith('-')) || '';
   const ratio = getArg('ratio') || '16:9';
   const duration = parseInt(getArg('duration') || '5', 10);
+  const outArg = args.find(a => a.startsWith('--output-dir=') || a.startsWith('--out='));
+  const noDownload = args.includes('--no-download');
+  let outputDirCli = null;
+  if (outArg) {
+    outputDirCli = outArg.includes('=') ? outArg.split('=').slice(1).join('=') : (args[args.indexOf(outArg) + 1] || null);
+  }
 
   if (!prompt) {
     console.log(JSON.stringify({
       success: false,
       error: 'MISSING_PROMPT',
-      message: 'Usage: node video.js "视频描述" [--ratio=16:9] [--duration=5]',
+      message: 'Usage: node video.js "视频描述" [--ratio=16:9] [--duration=5] [--output-dir=路径] [--no-download]',
     }, null, 2));
     process.exit(1);
   }
 
-  generateVideo(prompt, { ratio, duration }).then(result => {
+  generateVideo(prompt, {
+    ratio,
+    duration,
+    outputDir: outputDirCli,
+    saveToDisk: !noDownload,
+  }).then(result => {
     console.log(JSON.stringify(result, null, 2));
     process.exit(result.success ? 0 : 1);
   }).catch(e => {

@@ -9,57 +9,93 @@
  */
 
 const { chromium } = require('playwright');
-const path = require('path');
+const { resolveOutputDir, downloadImages } = require('./utils_output');
 
 const CDP_URL = process.env.DOUBAO_CDP_URL || 'http://127.0.0.1:9222';
 const DOUBAO_IMAGE_URL = 'https://www.doubao.com/chat/create-image';
 
 /**
- * 等待图片生成完成
- * 判断依据：生成中的 loading 动画消失 + 图片元素出现并稳定
+ * 等待图片生成完成（Playwright waitForFunction + 较大 polling，避免 while 密集轮询）
  */
 async function waitForImageDone(page, timeout = 180000) {
-  const start = Date.now();
-  let lastCount = 0;
-  let stableCount = 0;
-
-  while (Date.now() - start < timeout) {
-    await page.waitForTimeout(1500);
-
-    // 检测是否还在生成中（loading 状态）
-    const isGenerating = await page.evaluate(() => {
-      // 豆包图片生成时通常有进度条或 loading 指示器
-      const loadingSelectors = [
-        '[class*="loading"]',
-        '[class*="generating"]',
-        '[class*="progress"]',
-        '.skeleton',
-        '[class*="skeleton"]',
-      ];
-      for (const sel of loadingSelectors) {
-        const els = document.querySelectorAll(sel);
-        for (const el of els) {
-          if (el.offsetParent !== null && el.offsetWidth > 0) return true;
-        }
-      }
-      // 检查是否有 SVG 动画（loading spinner）
-      const spinners = document.querySelectorAll('svg[class*="spin"], [class*="spin"] svg, [class*="rotate"]');
-      for (const s of spinners) {
-        if (s.offsetParent !== null) return true;
-      }
-      return false;
+  try {
+    await page.evaluate(() => {
+      window.__doubaoImgWait = { last: -1, stable: 0 };
     });
+    await page.waitForFunction(
+      () => {
+        const loadingSelectors = [
+          '[class*="loading"]',
+          '[class*="generating"]',
+          '[class*="progress"]',
+          '.skeleton',
+          '[class*="skeleton"]',
+        ];
+        let isGenerating = false;
+        for (const sel of loadingSelectors) {
+          const els = document.querySelectorAll(sel);
+          for (const el of els) {
+            if (el.offsetParent !== null && el.offsetWidth > 0) {
+              isGenerating = true;
+              break;
+            }
+          }
+          if (isGenerating) break;
+        }
+        if (!isGenerating) {
+          const spinners = document.querySelectorAll('svg[class*="spin"], [class*="spin"] svg, [class*="rotate"]');
+          for (const s of spinners) {
+            if (s.offsetParent !== null) {
+              isGenerating = true;
+              break;
+            }
+          }
+        }
 
-    // 统计当前已生成的图片数量
+        const imgSelectors = [
+          '[class*="image-result"] img',
+          '[class*="result-image"] img',
+          '[class*="generated"] img',
+          '.image-item img',
+          '[class*="img-wrapper"] img',
+        ];
+        let maxCount = 0;
+        for (const sel of imgSelectors) {
+          const imgs = document.querySelectorAll(sel);
+          const valid = Array.from(imgs).filter(img => {
+            const src = img.src || img.getAttribute('data-src') || '';
+            return src && !src.includes('avatar') && !src.includes('icon') && !src.includes('logo');
+          });
+          if (valid.length > maxCount) maxCount = valid.length;
+        }
+
+        const onThread =
+          (window.location.pathname || '').includes('/thread/') ||
+          (window.location.href || '').indexOf('/thread/') !== -1;
+
+        if (isGenerating || maxCount === 0) {
+          window.__doubaoImgWait = { last: -1, stable: 0 };
+          return false;
+        }
+        const w = window.__doubaoImgWait;
+        if (maxCount === w.last) w.stable++;
+        else {
+          w.last = maxCount;
+          w.stable = 1;
+        }
+        const need = onThread ? 1 : 2;
+        return w.stable >= need;
+      },
+      { timeout, polling: 2000 }
+    );
+    await page.waitForTimeout(1500);
     const imgCount = await page.evaluate(() => {
-      // 豆包生成的图片通常在结果区域，img 标签带特定属性
       const imgSelectors = [
         '[class*="image-result"] img',
         '[class*="result-image"] img',
         '[class*="generated"] img',
         '.image-item img',
         '[class*="img-wrapper"] img',
-        // 兜底：找所有大尺寸图片（排除头像/图标）
       ];
       let maxCount = 0;
       for (const sel of imgSelectors) {
@@ -72,24 +108,29 @@ async function waitForImageDone(page, timeout = 180000) {
       }
       return maxCount;
     });
-
-    if (!isGenerating && imgCount > 0) {
-      if (imgCount === lastCount) {
-        stableCount++;
-        if (stableCount >= 2) {
-          return { done: true, reason: 'stable', imgCount };
-        }
-      } else {
-        stableCount = 0;
-        lastCount = imgCount;
+    return { done: true, reason: 'stable', imgCount };
+  } catch (_) {
+    const imgCount = await page.evaluate(() => {
+      const imgSelectors = [
+        '[class*="image-result"] img',
+        '[class*="result-image"] img',
+        '[class*="generated"] img',
+        '.image-item img',
+        '[class*="img-wrapper"] img',
+      ];
+      let maxCount = 0;
+      for (const sel of imgSelectors) {
+        const imgs = document.querySelectorAll(sel);
+        const valid = Array.from(imgs).filter(img => {
+          const src = img.src || img.getAttribute('data-src') || '';
+          return src && !src.includes('avatar') && !src.includes('icon') && !src.includes('logo');
+        });
+        if (valid.length > maxCount) maxCount = valid.length;
       }
-    } else {
-      stableCount = 0;
-      lastCount = imgCount;
-    }
+      return maxCount;
+    });
+    return { done: false, reason: 'timeout', imgCount };
   }
-
-  return { done: false, reason: 'timeout', imgCount: lastCount };
 }
 
 /**
@@ -157,6 +198,8 @@ async function extractImageUrls(page) {
  * @param {number} options.count - 生成数量 1-4，默认 1
  * @param {number} options.timeout - 超时 ms，默认 180000
  * @param {number} options.retries - 重试次数，默认 2
+ * @param {string|null} options.outputDir - 保存目录；未设则用 DOUBAO_OUTPUT_DIR 或桌面
+ * @param {boolean} options.saveToDisk - 是否下载到本地，默认 true
  */
 async function generateImage(prompt, options = {}) {
   const {
@@ -164,6 +207,8 @@ async function generateImage(prompt, options = {}) {
     count = 1,
     timeout = 180000,
     retries = 2,
+    outputDir: outputDirOpt = null,
+    saveToDisk = true,
   } = options;
 
   let lastError = null;
@@ -279,25 +324,40 @@ async function generateImage(prompt, options = {}) {
         }
       }
 
-      // 7. 等待生成完成
+      // 7. 等待生成完成（若地址栏进入 /thread/，与 DOM 一起判定，见 waitForImageDone 内 onThread）
       const { done, reason, imgCount } = await waitForImageDone(page, timeout);
+      const threadPageReached = /\/thread\//.test(page.url());
+      const pageUrl = page.url();
 
       // 8. 提取图片 URL
       const imageUrls = await extractImageUrls(page);
+
+      let localPaths = [];
+      const outDir = resolveOutputDir(outputDirOpt);
+      if (saveToDisk && imageUrls.length > 0) {
+        try {
+          localPaths = await downloadImages(page, imageUrls, outDir, prompt);
+        } catch (e) {
+          process.stderr.write(`下载到本地失败: ${e.message}\n`);
+        }
+      }
 
       await browser.close();
 
       return {
         success: true,
         prompt,
-        options: { ratio, count },
+        options: { ratio, count, outputDir: outDir, saveToDisk },
         imageUrls,
         imageCount: imageUrls.length,
+        localPaths,
         timestamp: new Date().toISOString(),
         meta: {
           generationDone: done,
           doneReason: reason,
           detectedCount: imgCount,
+          threadPageReached,
+          pageUrl,
           attempt: attempt + 1,
         },
       };
@@ -326,6 +386,8 @@ if (require.main === module) {
   const args = process.argv.slice(2);
   const ratioArg = args.find(a => a.startsWith('--ratio=') || a.startsWith('--ratio'));
   const countArg = args.find(a => a.startsWith('--count=') || a.startsWith('--count'));
+  const outArg = args.find(a => a.startsWith('--output-dir=') || a.startsWith('--out='));
+  const noDownload = args.includes('--no-download');
   const prompt = args.find(a => !a.startsWith('-')) || '';
 
   let ratio = '1:1';
@@ -339,17 +401,22 @@ if (require.main === module) {
     count = Math.min(4, Math.max(1, parseInt(raw) || 1));
   }
 
+  let outputDirCli = null;
+  if (outArg) {
+    outputDirCli = outArg.includes('=') ? outArg.split('=').slice(1).join('=') : (args[args.indexOf(outArg) + 1] || null);
+  }
+
   if (!prompt) {
     const usage = {
       success: false,
       error: 'MISSING_PROMPT',
-      message: 'Usage: node image.js "图片描述" [--ratio=1:1] [--count=1]',
+      message: 'Usage: node image.js "图片描述" [--ratio=1:1] [--count=1] [--output-dir=路径] [--no-download]',
     };
     console.log(JSON.stringify(usage, null, 2));
     process.exit(1);
   }
 
-  generateImage(prompt, { ratio, count }).then(result => {
+  generateImage(prompt, { ratio, count, outputDir: outputDirCli, saveToDisk: !noDownload }).then(result => {
     console.log(JSON.stringify(result, null, 2));
     process.exit(result.success ? 0 : 1);
   }).catch(e => {
