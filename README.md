@@ -16,6 +16,38 @@
 
 ---
 
+## 📋 目录
+
+- [新手必读](#新手必读)
+- [能力概览](#能力概览)
+- [快速开始](#快速开始)
+- [使用说明](#使用说明)
+- [参数速查](#参数速查)
+- [工作原理](#工作原理)
+- [功能特性](#功能特性)
+- [故障排查](#故障排查)
+- [FAQ](#faq)
+- [联系与作者](#联系与作者)
+- [License](#license)
+
+---
+
+## 新手必读
+
+本 Skill 是一个「中间人」程序：通过 Playwright 连接已登录 Chrome（CDP），在豆包网页自动完成图片生成与视频生成任务。没有它，无法直接调用豆包的生成能力。
+
+**必须满足的前置条件**：
+
+| # | 条件 | 说明 |
+|---|------|------|
+| 1 | 安装了 Google Chrome | 需要本地 Chrome 浏览器 |
+| 2 | Chrome 以调试模式运行 | 需要开放端口 9222（见下方步骤） |
+| 3 | 豆包已在该 Chrome 中登录 | 登录一次后永久有效 |
+
+**注意**：本 Skill 走的是 Chrome 浏览器里的豆包网页端；不会自动显示在豆包 App 里。要看执行情况，请看终端侧输出，或开启调试模式。
+
+---
+
 ## ✨ 能力概览
 
 | 功能 | 脚本 | 描述 |
@@ -27,16 +59,6 @@
 ---
 
 ## 🚀 快速开始
-
-### 新手必读
-
-使用本 Skill 前，必须满足以下三点：
-
-| # | 条件 | 说明 |
-|---|------|------|
-| 1 | 安装了 Google Chrome | 需要本地 Chrome 浏览器 |
-| 2 | Chrome 以调试模式运行 | 需要开放端口 9222（见下方步骤） |
-| 3 | 豆包已在该 Chrome 中登录 | 登录一次后永久有效 |
 
 ### 第一步：安装依赖
 
@@ -81,6 +103,17 @@ node scripts/ensure_chrome.js
 ---
 
 ## 📖 使用说明
+
+### 常用命令速查
+
+| 目的 | 命令 |
+|------|------|
+| 验证 Chrome 连接 | `node scripts/ensure_chrome.js` |
+| 生成图片 | `node scripts/image.js "描述词"` |
+| 生成视频 | `node scripts/video.js "描述词"` |
+| 指定比例 | `--ratio=16:9` |
+| 指定数量 | `--count=4` |
+| 指定时长 | `--duration=10` |
 
 ### 图片生成
 
@@ -179,26 +212,37 @@ node scripts/video.js "赛博朋克城市雨夜，飞行汽车穿梭" --ratio=16
 ## 🔄 工作原理
 
 ```mermaid
-sequenceDiagram
-    participant U as 用户/AI Agent
-    participant S as doubao-skills
-    participant P as Playwright
-    participant C as Chrome (CDP)
-    participant D as 豆包网页
-
-    U->>S: node image.js / video.js "prompt"
-    S->>P: connectOverCDP(9222)
-    P->>C: 连接已登录的 Chrome
-    C->>D: 导航到生成页面
-    S->>D: 定位输入框，填入 prompt
-    S->>D: 提交生成请求
-    loop 轮询等待
-        S->>D: 检查 loading 状态
-        D-->>S: 生成中 / 已完成
-    end
-    S->>D: 提取结果 URL
-    S-->>U: JSON (success, imageUrls/videoUrl, ...)
+flowchart LR
+  subgraph downstream["下游"]
+    A[用户 / AI Agent]
+  end
+  subgraph bridge["doubao-skills"]
+    B[Playwright + CDP]
+  end
+  subgraph upstream["上游"]
+    C[Chrome 浏览器]
+    D[豆包网页]
+  end
+  A -->|"node image.js prompt"| B
+  B <-->|"CDP 连接"| C
+  C -->|"已登录会话"| D
+  D --->|"生成完成"| B
+  B -->|"JSON 输出"| A
 ```
+
+**协议**：纯 JSON-RPC，通过 stdout 输出；调试日志在 stderr。
+
+---
+
+## ✨ 功能特性
+
+- 🎨 **图片生成**：支持多种比例（1:1、16:9、9:16 等）和数量控制
+- 🎬 **视频生成**：支持竖屏/横屏、5-10 秒时长
+- 🔐 **一次登录，永久复用**：豆包登录状态持久化
+- 📦 **纯 JSON 输出**：方便 AI Agent 解析和集成
+- 🔧 **自动重试**：生成失败自动重试，默认最多 3 次
+- ⏱️ **自动等待**：视频生成自动轮询直到完成
+- 🌐 **跨平台**：Windows/macOS/Linux 通用
 
 ---
 
@@ -215,12 +259,41 @@ sequenceDiagram
 
 ---
 
+## 🙋 FAQ
+
+**Q：为什么要用 Chrome CDP，而不是直接调用豆包 API？**
+
+> 豆包图片/视频生成功能目前没有开放的公共 API，通过 CDP 操控已登录的浏览器是最稳定的自动化方案。
+
+**Q：视频生成需要多久？**
+
+> 通常 1-5 分钟，取决于豆包服务器负载。脚本默认最多等待 6 分钟。
+
+**Q：图片 URL 有有效期吗？**
+
+> 豆包返回的图片 URL 通常是有签名的 CDN 链接，建议生成后尽快下载保存。
+
+**Q：可以批量生成多条 prompt 吗？**
+
+> 目前不支持批量模式，需要逐条调用。每次调用会新建一个对话，互不干扰。
+
+**Q：支持图片参考/图生图吗？**
+
+> 当前版本只支持文生图/文生视频，图生图功能待后续版本支持。
+
+**Q：Chrome 端口 9222 被占用怎么办？**
+
+> 可以换成其他端口，如 `--remote-debugging-port=9223`，然后设置环境变量 `DOUBAO_CDP_URL=http://127.0.0.1:9223`
+
+---
+
 ## 📁 文件结构
 
 ```
 doubao-skills/
 ├── SKILL.md                  # 技能描述（供 AI Agent 读取）
 ├── README.md                 # 本文档
+├── LICENSE                   # MIT 许可证
 └── scripts/
     ├── package.json          # 依赖（playwright）
     ├── image.js              # 图片生成脚本
@@ -230,31 +303,18 @@ doubao-skills/
 
 ---
 
-## 🙋 FAQ
+## 👤 联系与作者
 
-**Q：为什么要用 Chrome CDP，而不是直接调用豆包 API？**
-> 豆包图片/视频生成功能目前没有开放的公共 API，通过 CDP 操控已登录的浏览器是最稳定的自动化方案。
+**风之馨**，风之馨品牌创始人。
 
-**Q：视频生成需要多久？**
-> 通常 1-5 分钟，取决于豆包服务器负载。脚本默认最多等待 6 分钟。
+| 项目 | 内容 |
+|------|------|
+| 风之馨 | 身份：风之馨品牌创始人 |
+| GitHub | [@ai-fzx](https://github.com/ai-fzx) |
+| 微信公众号 | 风之馨技术录 |
+| 问题反馈 | [GitHub Issues](https://github.com/ai-fzx/doubao-skills/issues) |
 
-**Q：图片 URL 有有效期吗？**
-> 豆包返回的图片 URL 通常是有签名的 CDN 链接，建议生成后尽快下载保存。
-
-**Q：可以批量生成多条 prompt 吗？**
-> 目前不支持批量模式，需要逐条调用。每次调用会新建一个对话，互不干扰。
-
-**Q：支持图片参考/图生图吗？**
-> 当前版本只支持文生图/文生视频，图生图功能待后续版本支持。
-
----
-
-## 👤 作者
-
-**风之馨**
-
-- 🌐 GitHub: [@ai-fzx](https://github.com/ai-fzx)
-- 📝 微信公众号：风之馨技术录
+欢迎通过 Issues、公众号交流本 Skill。
 
 ---
 
