@@ -11,15 +11,36 @@ function getDefaultDesktopDir() {
   return path.join(home, 'Desktop');
 }
 
+function getDateFolderName() {
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+async function ensureDir(dirPath) {
+  try {
+    await fs.promises.access(dirPath);
+  } catch {
+    await fs.promises.mkdir(dirPath, { recursive: true });
+  }
+  return dirPath;
+}
+
 function resolveOutputDir(cliDir) {
+  let baseDir;
   if (cliDir != null && String(cliDir).trim() !== '') {
-    return path.resolve(String(cliDir).trim());
+    baseDir = path.resolve(String(cliDir).trim());
+  } else {
+    const env = process.env.DOUBAO_OUTPUT_DIR;
+    if (env != null && String(env).trim() !== '') {
+      baseDir = path.resolve(String(env).trim());
+    } else {
+      baseDir = getDefaultDesktopDir();
+    }
   }
-  const env = process.env.DOUBAO_OUTPUT_DIR;
-  if (env != null && String(env).trim() !== '') {
-    return path.resolve(String(env).trim());
-  }
-  return getDefaultDesktopDir();
+  // 按日期创建子目录
+  const dateFolder = getDateFolderName();
+  return path.join(baseDir, dateFolder);
 }
 
 function slugFromPrompt(prompt, maxLen = 36) {
@@ -102,6 +123,8 @@ async function saveUrlToFile(url, destPath, page) {
 }
 
 async function downloadImages(page, imageUrls, outputDir, prompt) {
+  // 确保目录存在
+  await ensureDir(outputDir);
   const slug = slugFromPrompt(prompt);
   const ts = timestampForFilename();
   const paths = [];
@@ -117,6 +140,8 @@ async function downloadImages(page, imageUrls, outputDir, prompt) {
 }
 
 async function downloadVideoAssets(page, { videoUrl, thumbnailUrl, downloadUrl, outputDir, prompt }) {
+  // 确保目录存在
+  await ensureDir(outputDir);
   const slug = slugFromPrompt(prompt);
   const ts = timestampForFilename();
   const out = {};
@@ -141,6 +166,8 @@ async function downloadVideoAssets(page, { videoUrl, thumbnailUrl, downloadUrl, 
 
 module.exports = {
   getDefaultDesktopDir,
+  getDateFolderName,
+  ensureDir,
   resolveOutputDir,
   slugFromPrompt,
   timestampForFilename,

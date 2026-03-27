@@ -86,7 +86,7 @@ async function waitForImageDone(page, timeout = 180000) {
         const need = onThread ? 1 : 2;
         return w.stable >= need;
       },
-      { timeout, polling: 2000 }
+      { timeout, polling: 4000 }
     );
     await page.waitForTimeout(1500);
     const imgCount = await page.evaluate(() => {
@@ -135,14 +135,42 @@ async function waitForImageDone(page, timeout = 180000) {
 
 /**
  * 提取生成的图片 URL 列表
+ * 只提取最新生成的图片，排除示例图、历史图片等无关图片
  */
 async function extractImageUrls(page) {
   return page.evaluate(() => {
-    const results = [];
-
-    // 优先级从高到低的选择器策略
+    // 优先策略：查找包含最新生成结果的容器
+    // 豆包通常会把最新生成的图片放在特定的容器中
+    
+    // 策略1：查找包含刚生成的图片的结果区域（通常在消息气泡中）
     const strategies = [
-      // 策略1：result/generated 区域内的 img
+      // 策略1：查找最新的 AI 消息气泡中的图片（最可靠）
+      () => {
+        // 找到所有 AI 消息气泡，取最后一个（最新的）
+        const messageBlocks = document.querySelectorAll('[class*="message"], [class*="chat-item"], [class*="response"]');
+        const messages = Array.from(messageBlocks);
+        
+        // 从后往前找，找到第一个包含图片的消息
+        for (let i = messages.length - 1; i >= 0; i--) {
+          const msg = messages[i];
+          const imgs = msg.querySelectorAll('img');
+          const validUrls = [];
+          for (const img of imgs) {
+            const src = img.src || img.getAttribute('data-src') || img.getAttribute('data-original') || '';
+            // 过滤掉头像、图标等
+            if (src && src.startsWith('http') && 
+                !src.includes('avatar') && !src.includes('icon') && 
+                !src.includes('logo') && !src.includes('emoji') &&
+                !src.includes('profile')) {
+              validUrls.push(src);
+            }
+          }
+          if (validUrls.length > 0) return [...new Set(validUrls)];
+        }
+        return null;
+      },
+      
+      // 策略2：result/generated 区域内的 img
       () => {
         const containers = document.querySelectorAll(
           '[class*="image-result"], [class*="result-image"], [class*="generated-image"], [class*="image-grid"]'
@@ -158,7 +186,8 @@ async function extractImageUrls(page) {
         });
         return urls.length > 0 ? urls : null;
       },
-      // 策略2：消息列表里最后一组图片
+      
+      // 策略3：消息列表里包含 tos-cn/bytedance/doubao 域名的图片（这些是生成的图片）
       () => {
         const allImgs = document.querySelectorAll('img[src*="tos-cn"], img[src*="bytedance"], img[src*="doubao"]');
         const urls = Array.from(allImgs)
@@ -166,16 +195,22 @@ async function extractImageUrls(page) {
           .filter(src => src && src.startsWith('http'));
         return urls.length > 0 ? [...new Set(urls)] : null;
       },
-      // 策略3：页面内所有较大的图片（宽度>200px 的，排除 UI 图标）
+      
+      // 策略4：只有非常明确是 AI 生成图片的域名才提取（最保守）
       () => {
+        const allowedDomains = ['doubao', 'bytedance', 'tos-cn', 'lpcdn', 'cdn'];
         const allImgs = document.querySelectorAll('img');
         const urls = Array.from(allImgs)
           .filter(img => {
             const src = img.src || '';
             const w = img.naturalWidth || img.width || 0;
-            return src.startsWith('http') && w > 200
-              && !src.includes('avatar') && !src.includes('icon')
-              && !src.includes('logo') && !src.includes('emoji');
+            // 必须宽度足够大，且域名是允许的
+            if (w < 300) return false;
+            if (!src.startsWith('http')) return false;
+            const domainMatch = allowedDomains.some(d => src.includes(d));
+            // 排除明显不是生成图的 URL
+            const excludeMatch = /avatar|icon|logo|emoji|profile|user-|comment|like/i.test(src);
+            return domainMatch && !excludeMatch;
           })
           .map(img => img.src);
         return urls.length > 0 ? [...new Set(urls)] : null;
@@ -222,12 +257,15 @@ async function generateImage(prompt, options = {}) {
 
       // 1. 导航到豆包图片生成页面
       const currentUrl = page.url();
-      if (!currentUrl.includes('doubao.com/chat')) {
-        await page.goto(DOUBAO_IMAGE_URL, { waitUntil: 'domcontentloaded', timeout: 20000 });
-        await page.waitForTimeout(2000);
-      } else if (!currentUrl.includes('create-image')) {
-        await page.goto(DOUBAO_IMAGE_URL, { waitUntil: 'domcontentloaded', timeout: 20000 });
-        await page.waitForTimeout(2000);
+      if (!currentUrl.includes('create-image')) {
+        try {
+          await page.goto(DOUBAO_IMAGE_URL, { waitUntil: 'domcontentloaded', timeout: 20000 });
+        } catch (_) {
+          // domcontentloaded 超时也继续，等输入框出现
+        }
+        // 等待 contenteditable 输入框出现（最多 15 秒），而不是固定等待
+        await page.waitForSelector('[contenteditable="true"]', { timeout: 15000 }).catch(() => {});
+        await page.waitForTimeout(500);
       }
 
       // 2. 检查登录状态（通过检测登录按钮，不依赖 URL 跳转）

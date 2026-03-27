@@ -14,6 +14,7 @@ const { resolveOutputDir, downloadVideoAssets } = require('./utils_output');
 const CDP_URL = process.env.DOUBAO_CDP_URL || 'http://127.0.0.1:9222';
 const VERBOSE = process.env.DOUBAO_VERBOSE === '1' || process.env.DOUBAO_VERBOSE === 'true';
 const DOUBAO_VIDEO_URL = 'https://www.doubao.com/chat/create-video';
+const DOUBAO_CHAT_URL = 'https://www.doubao.com/chat';
 
 /**
  * 检查登录状态（通过检测登录按钮，不依赖 URL）
@@ -66,6 +67,63 @@ async function fillInput(page, text) {
 }
 
 /**
+ * 选择视频生成模式（豆包 UI 中需要切换到视频模式）
+ */
+async function selectVideoMode(page) {
+  try {
+    // 尝试找到模式切换按钮（通常在输入框附近有"图片"、"视频"等选项卡）
+    const modeSelectors = [
+      // 视频模式按钮
+      '[class*="mode"]:has-text("视频")',
+      '[class*="tab"]:has-text("视频")',
+      'button:has-text("视频")',
+      '[role="tab"]:has-text("视频")',
+      '[data-mode="video"]',
+      // 也可能是一个下拉菜单
+      '[class*="select"]:has-text("视频")',
+      '[class*="dropdown"]:has-text("视频")',
+    ];
+
+    for (const sel of modeSelectors) {
+      const btn = page.locator(sel).first();
+      const visible = await btn.isVisible().catch(() => false);
+      if (visible) {
+        await btn.click();
+        await page.waitForTimeout(500);
+        // 检查是否切换成功（可能需要选择子选项）
+        const activeVideo = await page.locator('[class*="active"]:has-text("视频"), [aria-selected="true"]:has-text("视频")').isVisible().catch(() => false);
+        if (activeVideo) return true;
+      }
+    }
+    
+    // 如果找不到显式的视频按钮，尝试在输入框上方找到模式选择器
+    const toolbarSelectors = [
+      '[class*="toolbar"]',
+      '[class*="mode-switch"]',
+      '[class*="input-tool"]',
+    ];
+    
+    for (const sel of toolbarSelectors) {
+      const toolbar = page.locator(sel).first();
+      const visible = await toolbar.isVisible().catch(() => false);
+      if (visible) {
+        // 在工具栏中查找视频图标/按钮
+        const videoBtn = toolbar.locator('[class*="video"], [data-type="video"], svg[class*="video"]').first();
+        const btnVisible = await videoBtn.isVisible().catch(() => false);
+        if (btnVisible) {
+          await videoBtn.click();
+          await page.waitForTimeout(500);
+          return true;
+        }
+      }
+    }
+  } catch (e) {
+    // 模式选择失败，继续尝试直接输入（豆包可能已自动识别视频意图）
+  }
+  return false;
+}
+
+/**
  * 点击发送/生成按钮
  */
 async function clickSubmit(page) {
@@ -112,7 +170,7 @@ async function clickSubmit(page) {
  * 等待视频生成完成（waitForFunction + 较大 polling，避免 while 密集轮询与频繁日志）
  */
 async function waitForVideoDone(page, timeout = 360000, opts = {}) {
-  const polling = opts.polling != null ? opts.polling : 5000;
+  const polling = opts.polling != null ? opts.polling : 20000;
   const start = Date.now();
   let iv = null;
   if (VERBOSE) {
@@ -122,111 +180,71 @@ async function waitForVideoDone(page, timeout = 360000, opts = {}) {
     }, 60000);
   }
 
+  // 简化的检测逻辑：找到缩略图或视频元素，且 loading 消失或只有进度条
   try {
-    await page.evaluate(() => {
-      window.__doubaoVidWait = { last: null, stable: 0, mode: null };
-    });
-
     await page.waitForFunction(
       () => {
-        const bodyText = document.body.innerText || '';
-        const isGeneratingText = /生成中|generating|正在生成|(\d+%)/i.test(bodyText.slice(-1000));
-
-        const loadingEls = document.querySelectorAll(
-          '[class*="loading"], [class*="generating"], [class*="progress"], [class*="pending"], [class*="skeleton"]'
-        );
-        let isGeneratingEl = false;
-        for (const el of loadingEls) {
-          if (el.offsetParent !== null && el.offsetWidth > 20) {
-            isGeneratingEl = true;
-            break;
+        // 检查是否有视频缩略图（生成中或已完成都会有）
+        const thumbSelectors = [
+          'img[src*="video"]',
+          'img[src*="cover"]',
+          '[class*="video"] img[src]',
+          '[class*="cover"] img[src]',
+          '[class*="result"] img[src]'
+        ];
+        
+        let hasThumb = false;
+        for (const sel of thumbSelectors) {
+          const imgs = document.querySelectorAll(sel);
+          for (const img of imgs) {
+            const src = img.src || img.getAttribute('data-src') || '';
+            if (src && src.startsWith('http') && !src.includes('avatar') && !src.includes('icon')) {
+              hasThumb = true;
+              break;
+            }
           }
+          if (hasThumb) break;
         }
-
-        const isGenerating = isGeneratingText || isGeneratingEl;
-
-        let videoSrc = null;
+        
+        // 检查是否有视频元素
+        let hasVideo = false;
         const videoEls = document.querySelectorAll('video');
         for (const v of videoEls) {
-          const src = v.src || v.currentSrc || v.getAttribute('data-src') || '';
-          if (src && src.startsWith('http')) {
-            videoSrc = src;
-            break;
-          }
-          const source = v.querySelector('source');
-          if (source && source.src && source.src.startsWith('http')) {
-            videoSrc = source.src;
+          if (v.src || v.currentSrc || v.querySelector('source[src]')) {
+            hasVideo = true;
             break;
           }
         }
-
-        let downloadSrc = null;
-        const downloadEls = document.querySelectorAll('a[download], a[href*=".mp4"], [class*="download"] a');
-        for (const el of downloadEls) {
-          const href = el.href || el.getAttribute('data-url') || '';
-          if (href && href.startsWith('http')) {
-            downloadSrc = href;
-            break;
-          }
-        }
-
-        let thumbSrc = null;
-        const thumbSelectors = [
-          '[class*="video"] img[src*="http"]',
-          '[class*="cover"] img[src*="http"]',
-          '[class*="thumb"] img[src*="http"]',
-          '[class*="result"] img[src*="http"]',
+        
+        // 检查是否有视频下载链接
+        let hasDownloadLink = false;
+        const linkSelectors = [
+          'a[href*=".mp4"]',
+          'a[href*=".webm"]',
+          'a[download]',
+          '[class*="video-result"] a',
+          '[class*="download"] a'
         ];
-        for (const sel of thumbSelectors) {
-          const el = document.querySelector(sel);
-          if (el && el.src && el.src.startsWith('http') && !el.src.includes('avatar')) {
-            thumbSrc = el.src;
-            break;
+        for (const sel of linkSelectors) {
+          const links = document.querySelectorAll(sel);
+          for (const a of links) {
+            const href = a.href || a.getAttribute('data-url') || '';
+            if (href && (href.includes('.mp4') || href.includes('.webm') || a.hasAttribute('download'))) {
+              hasDownloadLink = true;
+              break;
+            }
           }
+          if (hasDownloadLink) break;
         }
-
-        const w = window.__doubaoVidWait;
-        const foundSrc = videoSrc || downloadSrc;
-        const key = foundSrc || thumbSrc || '';
-        // 提交后豆包常把当前会话切到 /thread/<id>；在会话页且不再「生成中」时，结果区更可信，可少等一轮 stable
-        const onThread =
-          (window.location.pathname || '').includes('/thread/') ||
-          (window.location.href || '').indexOf('/thread/') !== -1;
-
-        if (isGenerating) {
-          w.last = null;
-          w.stable = 0;
-          w.mode = null;
-          return false;
-        }
-
-        if (foundSrc) {
-          w.mode = 'video';
-          if (key === w.last) w.stable++;
-          else {
-            w.last = key;
-            w.stable = 1;
-          }
-          const need = onThread ? 1 : 2;
-          return w.stable >= need;
-        }
-
-        if (thumbSrc) {
-          w.mode = 'thumb_only';
-          const keyT = thumbSrc;
-          if (keyT === w.last) w.stable++;
-          else {
-            w.last = keyT;
-            w.stable = 1;
-          }
-          const need = onThread ? 2 : 3;
-          return w.stable >= need;
-        }
-
-        return false;
+        
+        // 只要有缩略图或视频或下载链接，就认为开始生成/生成完成
+        return hasThumb || hasVideo || hasDownloadLink;
       },
       { timeout, polling }
     );
+
+    // 等待一小段时间确保视频完全加载
+    await page.waitForTimeout(2000);
 
     const state = await page.evaluate(() => {
       const bodyText = document.body.innerText || '';
@@ -378,6 +396,271 @@ async function extractVideoResult(page) {
 }
 
 /**
+ * 点击视频播放按钮获取视频URL
+ * 豆包的视频需要点击播放才会加载到页面的 video 元素中
+ */
+async function hoverAndClickDownloadButton(page) {
+  try {
+    // 查找可点击的视频容器（包含播放按钮/图标）
+    const videoSelectors = [
+      '[class*="play-icon"]',
+      '[class*="video-player"]',
+      '[class*="block-video"]',
+      '[class*="video-wrapper"]',
+    ];
+
+    let clicked = false;
+    let videoUrl = null;
+
+    // 尝试点击视频区域来加载视频
+    for (const sel of videoSelectors) {
+      const elements = await page.locator(sel).all();
+      for (const el of elements) {
+        try {
+          const visible = await el.isVisible().catch(() => false);
+          const box = await el.boundingBox().catch(() => null);
+          if (visible && box && box.width > 50 && box.height > 50) {
+            await el.click();
+            await page.waitForTimeout(2000);
+            clicked = true;
+            break;
+          }
+        } catch (_) {}
+      }
+      if (clicked) break;
+    }
+
+    // 等待视频加载
+    await page.waitForTimeout(2000);
+
+    // 提取视频URL
+    videoUrl = await page.evaluate(() => {
+      // 查找 video 元素
+      const videos = document.querySelectorAll('video');
+      for (const v of videos) {
+        const src = v.src || v.currentSrc || v.getAttribute('data-src') || '';
+        if (src && src.startsWith('http') && (src.includes('.mp4') || src.includes('video'))) {
+          return src;
+        }
+      }
+      return null;
+    });
+
+    if (videoUrl) {
+      return { clicked: true, videoUrl, downloadUrl: videoUrl };
+    }
+
+    return null;
+  } catch (e) {
+    console.error('点击播放按钮失败:', e.message);
+    return null;
+  }
+}
+
+/**
+ * 旧版本：悬停缩略图并点击下载按钮获取视频URL（保留作为备用）
+ */
+async function hoverAndClickDownloadButtonOld(page) {
+  // 先获取当前页面数量
+  const initialPages = page.context().pages().length;
+
+  let result = null;
+
+  try {
+    result = await page.evaluate(async (initialPageCount) => {
+      // 查找视频容器/缩略图元素
+      const containerSelectors = [
+        '[class*="video-container"]',
+        '[class*="video-item"]',
+        '[class*="result-item"]',
+        '[class*="video-card"]',
+        '[class*="video-wrapper"]',
+        '[class*="media-item"]',
+        'div[class*="video"]',
+      ];
+
+      let targetContainer = null;
+      for (const sel of containerSelectors) {
+        const els = document.querySelectorAll(sel);
+        for (const el of els) {
+          // 查找包含图片的容器
+          const img = el.querySelector('img[src*="http"]');
+          if (img && !img.src.includes('avatar') && !img.src.includes('icon')) {
+            targetContainer = el;
+            break;
+          }
+        }
+        if (targetContainer) break;
+      }
+
+      // 如果没找到，尝试更宽泛的选择器
+      if (!targetContainer) {
+        const allDivs = document.querySelectorAll('div');
+        for (const el of allDivs) {
+          const img = el.querySelector('img[src*="video"], img[src*="cover"]');
+          if (img) {
+            targetContainer = el;
+            break;
+          }
+        }
+      }
+
+      if (!targetContainer) return { needNewPage: true, initialPageCount };
+
+      // 查找下载按钮（通常在悬停时出现）
+      const downloadBtnSelectors = [
+        '[class*="download"] button',
+        '[class*="download"] svg',
+        'button[class*="download"]',
+        '[aria-label*="下载"]',
+        '[class*="action"] button',
+        '[class*="video-action"]',
+        'button:has(svg[class*="download"])',
+        'button:has-text("下载")',
+        'button:has-text("下载视频")',
+        '[class*="video"]:has-text("下载")',
+        '[class*="result"]:has-text("下载")',
+      ];
+
+      let downloadBtn = null;
+      for (const sel of downloadBtnSelectors) {
+        const btns = targetContainer.querySelectorAll(sel);
+        for (const btn of btns) {
+          if (btn.offsetParent !== null || btn.getBoundingClientRect().width > 0) {
+            downloadBtn = btn;
+            break;
+          }
+        }
+        if (downloadBtn) break;
+      }
+
+      // 如果按钮在容器外部不可见，尝试整个页面查找
+      if (!downloadBtn) {
+        for (const sel of downloadBtnSelectors) {
+          const btns = document.querySelectorAll(sel);
+          for (const btn of btns) {
+            if (btn.offsetParent !== null && btn.getBoundingClientRect().width > 0) {
+              // 检查这个按钮是否在视频相关区域附近
+              const rect = btn.getBoundingClientRect();
+              if (rect.top > 100) { // 排除顶部导航栏的按钮
+                downloadBtn = btn;
+                break;
+              }
+            }
+          }
+          if (downloadBtn) break;
+        }
+      }
+
+      if (!downloadBtn) return { needNewPage: true, initialPageCount };
+
+      // 点击下载按钮
+      downloadBtn.click();
+
+      return { clicked: true, needNewPage: false, initialPageCount };
+    }, initialPages);
+  } catch (e) {
+    return null;
+  }
+
+  if (!result || !result.clicked) return null;
+
+  // 等待可能打开的新标签页
+  await page.waitForTimeout(2000);
+
+  const allPages = page.context().pages();
+  let newVideoUrl = null;
+  let newDownloadUrl = null;
+
+  // 检查是否有新打开的标签页
+  if (allPages.length > initialPages) {
+    // 遍历新打开的标签页查找视频URL
+    for (let i = initialPages; i < allPages.length; i++) {
+      const newPage = allPages[i];
+      try {
+        const pageResult = await newPage.evaluate(() => {
+          // 检查页面中的视频URL
+          let videoUrl = null;
+          let downloadUrl = null;
+
+          // 查找 video 元素
+          const videos = document.querySelectorAll('video');
+          for (const v of videos) {
+            const src = v.src || v.currentSrc || v.getAttribute('data-src') || '';
+            if (src && src.startsWith('http')) { videoUrl = src; break; }
+          }
+
+          // 查找下载链接
+          const dlSelectors = ['a[href*=".mp4"]', 'a[download]'];
+          for (const sel of dlSelectors) {
+            const links = document.querySelectorAll(sel);
+            for (const a of links) {
+              const href = a.href || a.getAttribute('data-url') || '';
+              if (href && href.startsWith('http')) { downloadUrl = href; break; }
+            }
+            if (downloadUrl) break;
+          }
+
+          // 也检查当前页面URL是否包含视频
+          const currentUrl = window.location.href;
+          if (currentUrl.includes('.mp4') || currentUrl.includes('video')) {
+            downloadUrl = currentUrl;
+          }
+
+          return { videoUrl, downloadUrl, url: currentUrl };
+        });
+
+        if (pageResult.videoUrl) newVideoUrl = pageResult.videoUrl;
+        if (pageResult.downloadUrl) newDownloadUrl = pageResult.downloadUrl;
+
+        // 如果找到视频URL，关闭新标签页
+        if (newVideoUrl || newDownloadUrl) {
+          await newPage.close();
+          break;
+        }
+      } catch (e) {
+        // 忽略新页面错误
+      }
+    }
+  }
+
+  // 如果没有从新页面获取到URL，再检查当前页面
+  if (!newVideoUrl && !newDownloadUrl) {
+    const currentPageResult = await page.evaluate(() => {
+      let videoUrl = null;
+      let downloadUrl = null;
+
+      const videos = document.querySelectorAll('video');
+      for (const v of videos) {
+        const src = v.src || v.currentSrc || v.getAttribute('data-src') || '';
+        if (src && src.startsWith('http')) { videoUrl = src; break; }
+      }
+
+      const dlSelectors = ['a[href*=".mp4"]', 'a[download][href*="http"]'];
+      for (const sel of dlSelectors) {
+        const links = document.querySelectorAll(sel);
+        for (const a of links) {
+          const href = a.href || a.getAttribute('data-url') || '';
+          if (href && href.startsWith('http')) { downloadUrl = href; break; }
+        }
+        if (downloadUrl) break;
+      }
+
+      return { videoUrl, downloadUrl };
+    });
+
+    if (currentPageResult.videoUrl) newVideoUrl = currentPageResult.videoUrl;
+    if (currentPageResult.downloadUrl) newDownloadUrl = currentPageResult.downloadUrl;
+  }
+
+  return {
+    clicked: true,
+    videoUrl: newVideoUrl,
+    downloadUrl: newDownloadUrl,
+  };
+}
+
+/**
  * 豆包视频生成主函数
  */
 async function generateVideo(prompt, options = {}) {
@@ -399,10 +682,30 @@ async function generateVideo(prompt, options = {}) {
       const ctx = browser.contexts()[0];
       const page = ctx.pages()[0];
 
-      // 1. 导航到豆包视频生成页
+      // 1. 导航到豆包视频生成页（先尝试 create-video，失败则尝试 chat 主页）
       const currentUrl = page.url();
+      let navigated = false;
+      
+      // 尝试 create-video 页面
       if (!currentUrl.includes('create-video')) {
-        await page.goto(DOUBAO_VIDEO_URL, { waitUntil: 'domcontentloaded', timeout: 25000 });
+        try {
+          await page.goto(DOUBAO_VIDEO_URL, { waitUntil: 'domcontentloaded', timeout: 15000 });
+          await page.waitForTimeout(2000);
+          // 检查页面是否正确加载（检查是否有输入框）
+          const hasInput = await page.locator('[contenteditable="true"]').first().isVisible().catch(() => false);
+          if (hasInput) {
+            navigated = true;
+          }
+        } catch (_) {}
+      }
+      
+      // 如果 create-video 页面没有成功加载，尝试 chat 主页
+      if (!navigated && !currentUrl.includes('doubao.com/chat')) {
+        await page.goto(DOUBAO_CHAT_URL, { waitUntil: 'domcontentloaded', timeout: 15000 });
+        await page.waitForTimeout(3000);
+      } else if (!navigated) {
+        // 如果已经在 chat 页面，刷新一下
+        await page.reload({ waitUntil: 'domcontentloaded' });
         await page.waitForTimeout(3000);
       }
 
@@ -417,7 +720,11 @@ async function generateVideo(prompt, options = {}) {
         };
       }
 
-      // 3–4. 填写 prompt 并提交
+      // 3. 选择视频生成模式
+      await selectVideoMode(page);
+      await page.waitForTimeout(500);
+
+      // 4. 填写 prompt 并提交
       const inputOk = await fillInput(page, prompt);
       if (!inputOk) {
         await browser.close();
@@ -430,10 +737,19 @@ async function generateVideo(prompt, options = {}) {
       await clickSubmit(page);
       process.stderr.write(`视频生成中，最多等待 ${Math.round(timeout / 1000)} 秒（完成后自动保存到本地）…\n`);
 
-      const waitResult = await waitForVideoDone(page, timeout, { polling: 5000 });
+      const waitResult = await waitForVideoDone(page, timeout, { polling: 20000 });
 
       // 6. 提取视频结果
       const videoResult = await extractVideoResult(page);
+
+      // 如果没有视频URL，尝试悬停缩略图并点击下载按钮
+      if (!videoResult.videoUrl && !videoResult.downloadUrl) {
+        const clickResult = await hoverAndClickDownloadButton(page);
+        if (clickResult && clickResult.clicked) {
+          if (clickResult.videoUrl) videoResult.videoUrl = clickResult.videoUrl;
+          if (clickResult.downloadUrl) videoResult.downloadUrl = clickResult.downloadUrl;
+        }
+      }
 
       // 合并等待过程中采集到的 src
       if (!videoResult.videoUrl && waitResult.videoSrc) videoResult.videoUrl = waitResult.videoSrc;
@@ -508,6 +824,7 @@ if (require.main === module) {
   const prompt = args.find(a => !a.startsWith('-')) || '';
   const ratio = getArg('ratio') || '16:9';
   const duration = parseInt(getArg('duration') || '5', 10);
+  const timeout = parseInt(getArg('timeout') || '360000', 10);
   const outArg = args.find(a => a.startsWith('--output-dir=') || a.startsWith('--out='));
   const noDownload = args.includes('--no-download');
   let outputDirCli = null;
@@ -519,7 +836,7 @@ if (require.main === module) {
     console.log(JSON.stringify({
       success: false,
       error: 'MISSING_PROMPT',
-      message: 'Usage: node video.js "视频描述" [--ratio=16:9] [--duration=5] [--output-dir=路径] [--no-download]',
+      message: 'Usage: node video.js "视频描述" [--ratio=16:9] [--duration=5] [--timeout=360000] [--output-dir=路径] [--no-download]',
     }, null, 2));
     process.exit(1);
   }
@@ -527,6 +844,7 @@ if (require.main === module) {
   generateVideo(prompt, {
     ratio,
     duration,
+    timeout,
     outputDir: outputDirCli,
     saveToDisk: !noDownload,
   }).then(result => {
