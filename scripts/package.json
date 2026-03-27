@@ -1,0 +1,17 @@
+{
+  "name": "doubao-skills-scripts",
+  "version": "1.0.0",
+  "description": "豆包图片/视频生成自动化脚本",
+  "main": "image.js",
+  "scripts": {
+    "image": "node image.js",
+    "video": "node video.js",
+    "ensure": "node ensure_chrome.js"
+  },
+  "dependencies": {
+    "playwright": "^1.40.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

@@ -1,0 +1,461 @@
+{
+  "buttons": [
+    {
+      "tag": "BUTTON",
+      "text": "风之馨技术录",
+      "aria": "",
+      "cls": "w-full",
+      "disabled": false,
+      "visible": true
+    },
+    {
+      "tag": "BUTTON",
+      "text": "",
+      "aria": "",
+      "cls": "flex shrink-0 items-center justify-center font-[400] whitespace-nowrap select-none [&_svg]:shrink-0 ",
+      "disabled": false,
+      "visible": true
+    },
+    {
+      "tag": "BUTTON",
+      "text": "",
+      "aria": "",
+      "cls": "flex shrink-0 items-center justify-center font-[400] whitespace-nowrap select-none [&_svg]:shrink-0 ",
+      "disabled": false,
+      "visible": true
+    },
+    {
+      "tag": "BUTTON",
+      "text": "图像视频",
+      "aria": "",
+      "cls": "semi-button semi-button-primary samantha-button-BghSMg tertiary-o1h39p medium-VC3b8a p-0! bg-transpa",
+      "disabled": false,
+      "visible": true
+    },
+    {
+      "tag": "BUTTON",
+      "text": "比例",
+      "aria": "",
+      "cls": "hover:cursor-pointer",
+      "disabled": false,
+      "visible": true
+    },
+    {
+      "tag": "BUTTON",
+      "text": "比例",
+      "aria": "",
+      "cls": "shrink-0 items-center justify-center whitespace-nowrap select-none [&_svg]:shrink-0 text-[14px] lead",
+      "disabled": false,
+      "visible": true
+    },
+    {
+      "tag": "BUTTON",
+      "text": "",
+      "aria": "发送",
+      "cls": "semi-button semi-button-disabled semi-button-primary-disabled send-btn-mNNnTf semi-button-with-icon ",
+      "disabled": true,
+      "visible": true
+    }
+  ],
+  "inputs": [
+    {
+      "tag": "INPUT",
+      "type": "file",
+      "placeholder": "",
+      "cls": "input-AKV3t2",
+      "contenteditable": "",
+      "visible": false
+    },
+    {
+      "tag": "DIV",
+      "type": "",
+      "placeholder": "",
+      "cls": "container-T1NpOJ editor-Fyrtb2",
+      "contenteditable": "true",
+      "visible": true
+    }
+  ],
+  "selects": [],
+  "allDivs": [
+    {
+      "tag": "DIV",
+      "text": "豆包新对话AI 创作云盘更多历史对话3D 动画生成制作熊猫老虎对战动画3D 动画生成生成 3D 动画视频生成熊猫晨间视频Windows Python安装报错处理",
+      "cls": "",
+      "children": 2
+    },
+    {
+      "tag": "DIV",
+      "text": "豆包新对话AI 创作云盘更多历史对话3D 动画生成制作熊猫老虎对战动画3D 动画生成生成 3D 动画视频生成熊猫晨间视频Windows Python安装报错处理",
+      "cls": "w-full h-full flex overflow-hidden bg-s-color-bg-body",
+      "children": 2
+    },
+    {
+      "tag": "DIV",
+      "text": "豆包新对话AI 创作云盘更多历史对话3D 动画生成制作熊猫老虎对战动画3D 动画生成生成 3D 动画视频生成熊猫晨间视频Windows Python安装报错处理",
+      "cls": "flex-1 flex relative main-with-nav-qPJ0z0",
+      "children": 2
+    },
+    {
+      "tag": "DIV",
+      "text": "豆包新对话AI 创作云盘更多历史对话3D 动画生成制作熊猫老虎对战动画3D 动画生成生成 3D 动画视频生成熊猫晨间视频Windows Python安装报错处理",
+      "cls": "relative p-12 sm:fixed overflow-hidden pointer-events-auto w-[var(--sidebar-widt",
+      "children": 4
+    },
+    {
+      "tag": "DIV",
+      "text": "AI 创作云盘更多历史对话3D 动画生成制作熊猫老虎对战动画3D 动画生成生成 3D 动画视频生成熊猫晨间视频Windows Python安装报错处理Flowa",
+      "cls": "\n            relative -mr-9 flow-scrollbar min-h-0 flex-1 overflow-y-auto\n      ",
+      "children": 2
+    },
+    {
+      "tag": "DIV",
+      "text": "AI 创作云盘更多",
+      "cls": "mb-22 flex w-full flex-col gap-3",
+      "children": 1
+    },
+    {
+      "tag": "DIV",
+      "text": "AI 创作云盘更多",
+      "cls": "flex flex-col gap-3",
+      "children": 3
+    },
+    {
+      "tag": "DIV",
+      "text": "AI 创作",
+      "cls": "",
+      "children": 1
+    },
+    {
+      "tag": "DIV",
+      "text": "AI 创作",
+      "cls": "flex w-full items-center justify-between",
+      "children": 1
+    },
+    {
+      "tag": "DIV",
+      "text": "AI 创作",
+      "cls": "truncate ml-[8px] flex-1 min-w-0 s-font-small flex items-center",
+      "children": 1
+    },
+    {
+      "tag": "DIV",
+      "text": "历史对话3D 动画生成制作熊猫老虎对战动画3D 动画生成生成 3D 动画视频生成熊猫晨间视频Windows Python安装报错处理Flowable优缺点分析热",
+      "cls": "flex flex-col flex-nowrap gap-2",
+      "children": 3
+    },
+    {
+      "tag": "DIV",
+      "text": "3D 动画生成制作熊猫老虎对战动画3D 动画生成生成 3D 动画视频生成熊猫晨间视频Windows Python安装报错处理Flowable优缺点分析热门短文片",
+      "cls": "flex flex-col gap-2",
+      "children": 21
+    },
+    {
+      "tag": "DIV",
+      "text": "3D 动画生成",
+      "cls": "",
+      "children": 1
+    },
+    {
+      "tag": "DIV",
+      "text": "3D 动画生成",
+      "cls": "wrapper-Xy3kj9 !h-32",
+      "children": 1
+    },
+    {
+      "tag": "DIV",
+      "text": "3D 动画生成",
+      "cls": "content-pWK1u_",
+      "children": 2
+    },
+    {
+      "tag": "SPAN",
+      "text": "3D 动画生成",
+      "cls": "title-Jj0HL7 after:content-['_'] after:block overallTitle-Z8PtnA",
+      "children": 0
+    },
+    {
+      "tag": "DIV",
+      "text": "3D 动画生成",
+      "cls": "",
+      "children": 1
+    },
+    {
+      "tag": "DIV",
+      "text": "3D 动画生成",
+      "cls": "wrapper-Xy3kj9 !h-32",
+      "children": 1
+    },
+    {
+      "tag": "DIV",
+      "text": "3D 动画生成",
+      "cls": "content-pWK1u_",
+      "children": 2
+    },
+    {
+      "tag": "SPAN",
+      "text": "3D 动画生成",
+      "cls": "title-Jj0HL7 after:content-['_'] after:block overallTitle-Z8PtnA",
+      "children": 0
+    },
+    {
+      "tag": "DIV",
+      "text": "生成 3D 动画视频",
+      "cls": "",
+      "children": 1
+    },
+    {
+      "tag": "DIV",
+      "text": "生成 3D 动画视频",
+      "cls": "wrapper-Xy3kj9 !h-32",
+      "children": 1
+    },
+    {
+      "tag": "DIV",
+      "text": "生成 3D 动画视频",
+      "cls": "content-pWK1u_",
+      "children": 2
+    },
+    {
+      "tag": "SPAN",
+      "text": "生成 3D 动画视频",
+      "cls": "title-Jj0HL7 after:content-['_'] after:block overallTitle-Z8PtnA",
+      "children": 0
+    },
+    {
+      "tag": "DIV",
+      "text": "生成熊猫晨间视频",
+      "cls": "",
+      "children": 1
+    },
+    {
+      "tag": "DIV",
+      "text": "生成熊猫晨间视频",
+      "cls": "wrapper-Xy3kj9 !h-32",
+      "children": 1
+    },
+    {
+      "tag": "DIV",
+      "text": "生成熊猫晨间视频",
+      "cls": "content-pWK1u_",
+      "children": 2
+    },
+    {
+      "tag": "SPAN",
+      "text": "生成熊猫晨间视频",
+      "cls": "title-Jj0HL7 after:content-['_'] after:block overallTitle-Z8PtnA",
+      "children": 0
+    },
+    {
+      "tag": "DIV",
+      "text": "视频生成自由运镜，图片文字一键成片极速飞驰浪漫邂逅一触即发好学金毛欢喜冤家登顶时刻上传图片添加照片，描述你想生成的视频﻿图像视频比例",
+      "cls": "flex min-w-0 flex-grow flex-col",
+      "children": 5
+    },
+    {
+      "tag": "DIV",
+      "text": "视频生成自由运镜，图片文字一键成片极速飞驰浪漫邂逅一触即发好学金毛欢喜冤家登顶时刻",
+      "cls": "w-full h-full flex-1 flex flex-col items-center overflow-hidden",
+      "children": 1
+    }
+  ],
+  "dropdowns": [
+    {
+      "tag": "DIV",
+      "cls": "relative p-12 sm:fixed overflow-hidden pointer-events-auto w-[var(--sidebar-width)] flex shrink-0 fl",
+      "text": "豆包新对话AI 创作云盘更多历史对话3D 动画生成制作熊猫老虎对战动画3D 动画生成生成 3D 动画视频生成熊猫晨间视频Windows Python安装报错处理",
+      "ariaLabel": ""
+    },
+    {
+      "tag": "DIV",
+      "cls": "flex-1 grow text-14 leading-24 font-semibold select-none",
+      "text": "新对话",
+      "ariaLabel": ""
+    },
+    {
+      "tag": "A",
+      "cls": "cursor-pointer flex items-center rounded-dbx-lg h-36 hover:bg-dbx-fill-trans-10-hover chat-item-r3aV",
+      "text": "3D 动画生成",
+      "ariaLabel": ""
+    },
+    {
+      "tag": "A",
+      "cls": "cursor-pointer flex items-center rounded-dbx-lg h-36 hover:bg-dbx-fill-trans-10-hover chat-item-r3aV",
+      "text": "制作熊猫老虎对战动画",
+      "ariaLabel": ""
+    },
+    {
+      "tag": "A",
+      "cls": "cursor-pointer flex items-center rounded-dbx-lg h-36 hover:bg-dbx-fill-trans-10-hover chat-item-r3aV",
+      "text": "3D 动画生成",
+      "ariaLabel": ""
+    },
+    {
+      "tag": "A",
+      "cls": "cursor-pointer flex items-center rounded-dbx-lg h-36 hover:bg-dbx-fill-trans-10-hover chat-item-r3aV",
+      "text": "生成 3D 动画视频",
+      "ariaLabel": ""
+    },
+    {
+      "tag": "A",
+      "cls": "cursor-pointer flex items-center rounded-dbx-lg h-36 hover:bg-dbx-fill-trans-10-hover chat-item-r3aV",
+      "text": "生成熊猫晨间视频",
+      "ariaLabel": ""
+    },
+    {
+      "tag": "A",
+      "cls": "cursor-pointer flex items-center rounded-dbx-lg h-36 hover:bg-dbx-fill-trans-10-hover chat-item-r3aV",
+      "text": "Windows Python安装报错处理",
+      "ariaLabel": ""
+    },
+    {
+      "tag": "A",
+      "cls": "cursor-pointer flex items-center rounded-dbx-lg h-36 hover:bg-dbx-fill-trans-10-hover chat-item-r3aV",
+      "text": "Flowable优缺点分析",
+      "ariaLabel": ""
+    },
+    {
+      "tag": "A",
+      "cls": "cursor-pointer flex items-center rounded-dbx-lg h-36 hover:bg-dbx-fill-trans-10-hover chat-item-r3aV",
+      "text": "热门短文片段推荐",
+      "ariaLabel": ""
+    },
+    {
+      "tag": "A",
+      "cls": "cursor-pointer flex items-center rounded-dbx-lg h-36 hover:bg-dbx-fill-trans-10-hover chat-item-r3aV",
+      "text": "Spring中@Autowired与@Resource注解对比及选型建议",
+      "ariaLabel": ""
+    },
+    {
+      "tag": "A",
+      "cls": "cursor-pointer flex items-center rounded-dbx-lg h-36 hover:bg-dbx-fill-trans-10-hover chat-item-r3aV",
+      "text": "nohup java -jar 日志输出配置",
+      "ariaLabel": ""
+    },
+    {
+      "tag": "A",
+      "cls": "cursor-pointer flex items-center rounded-dbx-lg h-36 hover:bg-dbx-fill-trans-10-hover chat-item-r3aV",
+      "text": "AutoX.js插件名称",
+      "ariaLabel": ""
+    },
+    {
+      "tag": "A",
+      "cls": "cursor-pointer flex items-center rounded-dbx-lg h-36 hover:bg-dbx-fill-trans-10-hover chat-item-r3aV",
+      "text": "提取日期与工作时间",
+      "ariaLabel": ""
+    },
+    {
+      "tag": "A",
+      "cls": "cursor-pointer flex items-center rounded-dbx-lg h-36 hover:bg-dbx-fill-trans-10-hover chat-item-r3aV",
+      "text": "风之馨AI漫剧海报设计",
+      "ariaLabel": ""
+    },
+    {
+      "tag": "A",
+      "cls": "cursor-pointer flex items-center rounded-dbx-lg h-36 hover:bg-dbx-fill-trans-10-hover chat-item-r3aV",
+      "text": "分析图片并设计海报提示词",
+      "ariaLabel": ""
+    },
+    {
+      "tag": "A",
+      "cls": "cursor-pointer flex items-center rounded-dbx-lg h-36 hover:bg-dbx-fill-trans-10-hover chat-item-r3aV",
+      "text": "Obsidian权限错误解释",
+      "ariaLabel": ""
+    },
+    {
+      "tag": "A",
+      "cls": "cursor-pointer flex items-center rounded-dbx-lg h-36 hover:bg-dbx-fill-trans-10-hover chat-item-r3aV",
+      "text": "发票信息提取",
+      "ariaLabel": ""
+    },
+    {
+      "tag": "A",
+      "cls": "cursor-pointer flex items-center rounded-dbx-lg h-36 hover:bg-dbx-fill-trans-10-hover chat-item-r3aV",
+      "text": "海报尺寸规格",
+      "ariaLabel": ""
+    },
+    {
+      "tag": "A",
+      "cls": "cursor-pointer flex items-center rounded-dbx-lg h-36 hover:bg-dbx-fill-trans-10-hover chat-item-r3aV",
+      "text": "Brave Search的作用",
+      "ariaLabel": ""
+    }
+  ],
+  "toolbars": [
+    {
+      "cls": "chat-item-overflow-tooltip-trigger-gX7rqj",
+      "text": "",
+      "children": 0
+    },
+    {
+      "cls": "chat-item-overflow-tooltip-trigger-gX7rqj",
+      "text": "",
+      "children": 0
+    },
+    {
+      "cls": "chat-item-overflow-tooltip-trigger-gX7rqj",
+      "text": "",
+      "children": 0
+    },
+    {
+      "cls": "chat-item-overflow-tooltip-trigger-gX7rqj",
+      "text": "",
+      "children": 0
+    },
+    {
+      "cls": "chat-item-overflow-tooltip-trigger-gX7rqj",
+      "text": "",
+      "children": 0
+    },
+    {
+      "cls": "chat-item-overflow-tooltip-trigger-gX7rqj",
+      "text": "",
+      "children": 0
+    },
+    {
+      "cls": "chat-item-overflow-tooltip-trigger-gX7rqj",
+      "text": "",
+      "children": 0
+    },
+    {
+      "cls": "chat-item-overflow-tooltip-trigger-gX7rqj",
+      "text": "",
+      "children": 0
+    },
+    {
+      "cls": "chat-item-overflow-tooltip-trigger-gX7rqj",
+      "text": "",
+      "children": 0
+    },
+    {
+      "cls": "chat-item-overflow-tooltip-trigger-gX7rqj",
+      "text": "",
+      "children": 0
+    },
+    {
+      "cls": "chat-item-overflow-tooltip-trigger-gX7rqj",
+      "text": "",
+      "children": 0
+    },
+    {
+      "cls": "chat-item-overflow-tooltip-trigger-gX7rqj",
+      "text": "",
+      "children": 0
+    },
+    {
+      "cls": "chat-item-overflow-tooltip-trigger-gX7rqj",
+      "text": "",
+      "children": 0
+    },
+    {
+      "cls": "chat-item-overflow-tooltip-trigger-gX7rqj",
+      "text": "",
+      "children": 0
+    },
+    {
+      "cls": "chat-item-overflow-tooltip-trigger-gX7rqj",
+      "text": "",
+      "children": 0
+    }
+  ],
+  "currentUrl": "https://www.doubao.com/chat/create-video"
+}
